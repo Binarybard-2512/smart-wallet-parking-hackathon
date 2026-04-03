@@ -6,14 +6,16 @@ import {
   computePath,
   COLS, SLOT_GAP_X, OFFSET_X,
   ROW_Z, PAIR_AISLE_Z, INTER_LANE_Z,
-  GATE_X, GATE_Z,
+  GATE_X, GATE_Z, ENTRY_AISLE_Z,
   LOT_HALF_W, LOT_FRONT_Z, LOT_BACK_Z,
+  MAIN_AISLE_X,
 } from '../utils/pathfinder'
 
-const LOT_DEPTH    = LOT_FRONT_Z - LOT_BACK_Z          // 18
-const LOT_CENTER_Z = (LOT_FRONT_Z + LOT_BACK_Z) / 2   // 0
+const LOT_DEPTH    = LOT_FRONT_Z - LOT_BACK_Z        // 18
+const LOT_CENTER_Z = (LOT_FRONT_Z + LOT_BACK_Z) / 2 // 0
 const WALL_H       = 2.8
 const GATE_HW      = 2.2   // half-width of gate opening
+const LANE_W       = LOT_HALF_W * 2 - 0.6            // usable lane width
 
 // ── Parking slot ─────────────────────────────────────────────────────────
 const GridSlot = ({ slotId, carInSlot, position }) => {
@@ -95,7 +97,7 @@ const CarSymbol = ({ color }) => (
 
 // ── Animated car that follows waypoints ──────────────────────────────────
 const MovingCar = ({ waypoints, color }) => {
-  const ref = useRef()
+  const ref  = useRef()
   const tRef = useRef(0)
 
   const segs = waypoints.slice(1).map((pt, i) => {
@@ -130,7 +132,6 @@ const MovingCar = ({ waypoints, color }) => {
 const PathVisualizer = ({ slotId, type }) => {
   const { waypoints: base, steps } = computePath({ slotId })
   const isEntry   = type === 'entry'
-  // EXIT animation: reverse so car travels slot → gate
   const waypoints = isEntry ? base : [...base].reverse()
   const pathColor = isEntry ? '#3b82f6' : '#f59e0b'
   const label     = isEntry ? '📥 Parking' : '📤 Retrieving'
@@ -163,13 +164,137 @@ const PathVisualizer = ({ slotId, type }) => {
   )
 }
 
+// ── Driving lane strips + markings ────────────────────────────────────────
+const DrivingLanes = () => {
+  const Y = -0.24   // just above the floor
+
+  // Dashed centre-line arrow helper rendered as small chevron meshes
+  const CentreDashes = ({ zStart, zEnd, x = MAIN_AISLE_X, count = 5 }) => {
+    const step = (zEnd - zStart) / (count + 1)
+    return (
+      <group>
+        {Array.from({ length: count }, (_, i) => {
+          const z = zStart + step * (i + 1)
+          return (
+            <mesh key={i} rotation={[-Math.PI/2, 0, 0]} position={[x, Y + 0.012, z]}>
+              <planeGeometry args={[0.12, 0.55]} />
+              <meshStandardMaterial color="#facc15" opacity={0.55} transparent />
+            </mesh>
+          )
+        })}
+      </group>
+    )
+  }
+
+  // Arrow chevrons pointing in the −z direction (into the lot)
+  const ArrowChevrons = ({ z, count = 4, laneWidth }) => {
+    const spacing = laneWidth / (count + 1)
+    const xStart  = -(laneWidth / 2)
+    return (
+      <group>
+        {Array.from({ length: count }, (_, i) => {
+          const x = xStart + spacing * (i + 1)
+          return (
+            <mesh key={i} rotation={[-Math.PI/2, 0, 0]} position={[x, Y + 0.013, z]}>
+              <planeGeometry args={[0.08, 0.35]} />
+              <meshStandardMaterial color="#facc15" opacity={0.45} transparent />
+            </mesh>
+          )
+        })}
+      </group>
+    )
+  }
+
+  return (
+    <group>
+      {/* ── Main entry aisle (gate → row 0) ─────────────────────── */}
+      <mesh rotation={[-Math.PI/2, 0, 0]} position={[MAIN_AISLE_X, Y, (GATE_Z + ROW_Z[0]) / 2]}>
+        <planeGeometry args={[LANE_W, GATE_Z - ROW_Z[0]]} />
+        <meshStandardMaterial color="#1e3a5f" opacity={0.65} transparent />
+      </mesh>
+      {/* edge lines — main aisle */}
+      {[-LOT_HALF_W + 0.32, LOT_HALF_W - 0.32].map((ex, i) => (
+        <mesh key={i} rotation={[-Math.PI/2, 0, 0]} position={[ex, Y + 0.01, (GATE_Z + ROW_Z[0]) / 2]}>
+          <planeGeometry args={[0.06, GATE_Z - ROW_Z[0]]} />
+          <meshStandardMaterial color="#facc15" opacity={0.7} transparent />
+        </mesh>
+      ))}
+      <CentreDashes zStart={ROW_Z[0]} zEnd={GATE_Z} count={5} />
+
+      {/* ── Pair aisles (between paired rows) ───────────────────── */}
+      {PAIR_AISLE_Z.map((az, i) => {
+        const frontRowZ = ROW_Z[i * 2]      // row above the aisle
+        const backRowZ  = ROW_Z[i * 2 + 1]  // row below the aisle
+        const aisleH    = frontRowZ - backRowZ  // depth of the aisle gap
+        return (
+          <group key={i}>
+            {/* Lane surface */}
+            <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, Y, az]}>
+              <planeGeometry args={[LANE_W, aisleH - 0.1]} />
+              <meshStandardMaterial color="#0f2744" opacity={0.72} transparent />
+            </mesh>
+            {/* Edge stripes (yellow) */}
+            {[-LOT_HALF_W + 0.32, LOT_HALF_W - 0.32].map((ex, j) => (
+              <mesh key={j} rotation={[-Math.PI/2, 0, 0]} position={[ex, Y + 0.011, az]}>
+                <planeGeometry args={[0.07, aisleH - 0.1]} />
+                <meshStandardMaterial color="#facc15" opacity={0.65} transparent />
+              </mesh>
+            ))}
+            {/* Centre dashes along z-axis (short — this lane is lateral) */}
+            <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, Y + 0.011, az]}>
+              <planeGeometry args={[LANE_W - 0.5, 0.07]} />
+              <meshStandardMaterial color="#facc15" opacity={0.25} transparent />
+            </mesh>
+            {/* Row-label above lane */}
+            <Html position={[-LOT_HALF_W + 0.7, 0.45, az]} center>
+              <div style={{
+                color:'#facc15', fontSize:'9px', fontWeight:700,
+                background:'rgba(0,0,0,0.5)', padding:'1px 5px', borderRadius:3,
+                border:'1px solid rgba(250,204,21,0.3)', whiteSpace:'nowrap',
+                pointerEvents:'none'
+              }}>
+                🚗 AISLE {i + 1}
+              </div>
+            </Html>
+          </group>
+        )
+      })}
+
+      {/* ── Inter-pair lanes (between pairs of rows) ─────────────── */}
+      {INTER_LANE_Z.map((lz, i) => {
+        // the lane sits between pair i's back row and pair (i+1)'s front row
+        const topZ    = ROW_Z[i * 2 + 1]    // bottom of the row above
+        const bottomZ = ROW_Z[(i + 1) * 2]  // top of the row below
+        const laneH   = topZ - bottomZ
+        return (
+          <group key={i}>
+            {/* Lane surface — slightly lighter to distinguish */}
+            <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, Y, lz]}>
+              <planeGeometry args={[LANE_W, laneH - 0.1]} />
+              <meshStandardMaterial color="#162032" opacity={0.60} transparent />
+            </mesh>
+            {/* White edge stripes */}
+            {[-LOT_HALF_W + 0.32, LOT_HALF_W - 0.32].map((ex, j) => (
+              <mesh key={j} rotation={[-Math.PI/2, 0, 0]} position={[ex, Y + 0.011, lz]}>
+                <planeGeometry args={[0.07, laneH - 0.1]} />
+                <meshStandardMaterial color="#ffffff" opacity={0.35} transparent />
+              </mesh>
+            ))}
+            {/* Directional chevron arrows */}
+            <ArrowChevrons z={lz} count={5} laneWidth={LANE_W} />
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
 // ── Parking lot walls ─────────────────────────────────────────────────────
 const LotWalls = () => {
   const wallMat = <meshStandardMaterial color="#334155" metalness={0.2} roughness={0.8}/>
   const W = LOT_HALF_W, frontZ = LOT_FRONT_Z, backZ = LOT_BACK_Z
   const y = WALL_H / 2, t = 0.3
 
-  // front-left, front-right, back, left, right
   return (
     <group>
       {/* Back wall */}
@@ -203,18 +328,11 @@ const LotFloor = () => {
         <planeGeometry args={[W*2, LOT_DEPTH]}/>
         <meshStandardMaterial color="#0f172a"/>
       </mesh>
-      {/* Row strips — light band under each row */}
+      {/* Row strips — light band under each slot row */}
       {ROW_Z.map((z, i) => (
         <mesh key={i} rotation={[-Math.PI/2,0,0]} position={[0,0.01,z]}>
           <planeGeometry args={[W*2 - 0.6, 2.0]}/>
           <meshStandardMaterial color="#1e293b"/>
-        </mesh>
-      ))}
-      {/* Aisle lanes between paired rows */}
-      {PAIR_AISLE_Z.map((z, i) => (
-        <mesh key={i} rotation={[-Math.PI/2,0,0]} position={[0,0.005,z]}>
-          <planeGeometry args={[W*2 - 0.6, 2.6]}/>
-          <meshStandardMaterial color="#172033" opacity={0.8} transparent/>
         </mesh>
       ))}
       {/* White slot-divider lines */}
@@ -290,6 +408,7 @@ export default function ParkingGrid({ totalSlots = 60, parkedCars = [], activePa
         <pointLight position={[0, 8, -5]} intensity={0.6} color="#93c5fd"/>
 
         <LotFloor />
+        <DrivingLanes />
         <LotWalls />
         <GateSign />
 
