@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function ExitPanel({ onExit, parkedCars }) {
+export default function ExitPanel({ onExit, parkedCars, onRetrieve }) {
   const [rfid, setRfid] = useState('')
   const [frequency, setFrequency] = useState('')
   const [result, setResult] = useState(null)
@@ -29,12 +29,14 @@ export default function ExitPanel({ onExit, parkedCars }) {
     setResult(prev => ({ 
       ...prev, 
       verified: true,
-      robotPath: `Retrieve from ${car.slot.row},${car.slot.col} → Exit C`
+      robotPath: `Retrieve from Slot ${car.slot.id} → Exit Gate`
     }))
+    if (onRetrieve) onRetrieve(car.slot.id)
   }
 
   const confirmExit = () => {
-    if (onExit) onExit()
+    if (onExit) onExit(rfid)
+    if (onRetrieve) onRetrieve(null)
     setResult(prev => ({ ...prev, status: 'EXITED' }))
   }
 

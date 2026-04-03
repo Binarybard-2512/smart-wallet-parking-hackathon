@@ -4,7 +4,7 @@ function generateRfid() {
   return `RFID-${Math.random().toString(36).substr(2, 6).toUpperCase()}`
 }
 
-export default function EntryPanel({ onPark, parkedCars }) {
+export default function EntryPanel({ onPark, parkedCars, totalSlots = 60, onSlotAssigned }) {
   const [frequency, setFrequency] = useState('315.00')
   const [rfidCard, setRfidCard] = useState('')
   const [result, setResult] = useState(null)
@@ -32,19 +32,19 @@ export default function EntryPanel({ onPark, parkedCars }) {
   }
 
   const assignNearestSlot = () => {
-    // NEAREST slots from Entry A (0,0) - Manhattan distance
-    const candidates = [
-      { row: 0, col: 1, type: 'compact', distance: 1 },
-      { row: 1, col: 0, type: 'standard', distance: 1 },
-      { row: 0, col: 2, type: 'compact', distance: 2 },
-      { row: 1, col: 1, type: 'standard', distance: 2 },
-      { row: 2, col: 0, type: 'standard', distance: 2 }
-    ]
+    const occupiedIds = parkedCars.map(c => c.slot?.id);
+    let bestFit = null;
+    for (let i = 1; i <= totalSlots; i++) {
+        if (!occupiedIds.includes(i)) {
+            bestFit = { id: i, type: result.size || 'standard' };
+            break;
+        }
+    }
+    if (!bestFit) bestFit = { id: Math.floor(Math.random() * totalSlots) + 1, type: 'standard' }; // fallback
     
-    // Find nearest size match
-    const bestFit = candidates.find(s => s.type === result.size || s.type === 'standard') || candidates[0]
     setSlotAssigned(bestFit)
     setResult(prev => ({ ...prev, slot: bestFit }))
+    if (onSlotAssigned) onSlotAssigned(bestFit.id)
   }
 
   const confirmPark = () => {
@@ -57,6 +57,7 @@ export default function EntryPanel({ onPark, parkedCars }) {
       parkedAt: new Date().toLocaleTimeString()
     }
     if (onPark) onPark(carData)
+    if (onSlotAssigned) onSlotAssigned(null)
   }
 
   const reset = () => {
@@ -65,6 +66,7 @@ export default function EntryPanel({ onPark, parkedCars }) {
     setParked(false)
     setRfidCard('')
     setFrequency('315.00')
+    if (onSlotAssigned) onSlotAssigned(null)
   }
 
   return (
