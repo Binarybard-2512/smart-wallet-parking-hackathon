@@ -3,13 +3,17 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Html, Line } from '@react-three/drei'
 import { useSpring, a } from '@react-spring/three'
 import {
-  computePath,
+  computePath, getSlotX,
+  ENTRY_GATE_X, ENTRY_GATE_Z,
+  EXIT_GATE_X, EXIT_GATE_Z,
   COLS, SLOT_GAP_X, OFFSET_X,
   ROW_Z, PAIR_AISLE_Z, INTER_LANE_Z,
   GATE_X, GATE_Z, ENTRY_AISLE_Z,
   LOT_HALF_W, LOT_FRONT_Z, LOT_BACK_Z,
   MAIN_AISLE_X,
 } from '../utils/pathfinder'
+
+
 
 const LOT_DEPTH    = LOT_FRONT_Z - LOT_BACK_Z        // 18
 const LOT_CENTER_Z = (LOT_FRONT_Z + LOT_BACK_Z) / 2 // 0
@@ -130,27 +134,30 @@ const MovingCar = ({ waypoints, color }) => {
 
 // ── Path line + dots + moving car ────────────────────────────────────────
 const PathVisualizer = ({ slotId, type }) => {
-  const { waypoints: base, steps } = computePath({ slotId })
+  const { waypoints, steps } = computePath({ slotId, type })
   const isEntry   = type === 'entry'
-  const waypoints = isEntry ? base : [...base].reverse()
   const pathColor = isEntry ? '#3b82f6' : '#f59e0b'
   const label     = isEntry ? '📥 Parking' : '📤 Retrieving'
+  const gateX     = isEntry ? ENTRY_GATE_X : EXIT_GATE_X
+  const gateZ     = isEntry ? ENTRY_GATE_Z : EXIT_GATE_Z
+
 
   return (
     <group>
-      <Line points={base} color={pathColor} lineWidth={3} />
-      {base.map((pt, i) => (
+      <Line points={waypoints} color={pathColor} lineWidth={3} />
+      {waypoints.map((pt, i) => (
         <mesh key={i} position={pt}>
-          <sphereGeometry args={[0.1, 10, 10]}/>
+          <sphereGeometry args={[0.08, 10, 10]}/>
           <meshStandardMaterial
-            color={i===0?'#22c55e': i===base.length-1?'#ef4444': pathColor}
+            color={i===0?'#22c55e': i===waypoints.length-1?'#ef4444': pathColor}
             emissive={pathColor} emissiveIntensity={0.9}
           />
         </mesh>
       ))}
       <MovingCar waypoints={waypoints} color={pathColor} />
       {/* Label at gate */}
-      <Html position={[GATE_X, 1.8, GATE_Z]} center>
+      <Html position={[gateX, 1.8, gateZ]} center>
+
         <div style={{
           color:'#fff', background:'rgba(15,23,42,0.93)',
           padding:'5px 12px', borderRadius:'8px', fontSize:'12px',
@@ -297,24 +304,36 @@ const LotWalls = () => {
 
   return (
     <group>
-      {/* Back wall */}
-      <mesh position={[0, y, backZ]}><boxGeometry args={[W*2+t, WALL_H, t]}/>{wallMat}</mesh>
+      {/* Back wall with Exit Gate gap at Back-Left side */}
+      <mesh position={[(-W + (EXIT_GATE_X - 1.5)) / 2, y, backZ]}>
+        <boxGeometry args={[Math.abs((EXIT_GATE_X - 1.5) - (-W)), WALL_H, t]}/>{wallMat}
+      </mesh>
+      <mesh position={[(EXIT_GATE_X + 1.5 + W) / 2, y, backZ]}>
+        <boxGeometry args={[W - (EXIT_GATE_X + 1.5), WALL_H, t]}/>{wallMat}
+      </mesh>
+      
       {/* Left wall */}
       <mesh position={[-W, y, LOT_CENTER_Z]}><boxGeometry args={[t, WALL_H, LOT_DEPTH]}/>{wallMat}</mesh>
       {/* Right wall */}
       <mesh position={[W, y, LOT_CENTER_Z]}><boxGeometry args={[t, WALL_H, LOT_DEPTH]}/>{wallMat}</mesh>
-      {/* Front-left (with gate gap) */}
-      <mesh position={[-(W + GATE_HW)/2, y, frontZ]}>
-        <boxGeometry args={[W - GATE_HW, WALL_H, t]}/>{wallMat}
+      
+      {/* Front wall with Entry Gate gap at Front-Right side */}
+      <mesh position={[(-W + (ENTRY_GATE_X - 1.5)) / 2, y, frontZ]}>
+        <boxGeometry args={[W + (ENTRY_GATE_X - 1.5), WALL_H, t]}/>{wallMat}
       </mesh>
-      {/* Front-right */}
-      <mesh position={[(W + GATE_HW)/2, y, frontZ]}>
-        <boxGeometry args={[W - GATE_HW, WALL_H, t]}/>{wallMat}
+      <mesh position={[(ENTRY_GATE_X + 1.5 + W) / 2, y, frontZ]}>
+        <boxGeometry args={[W - (ENTRY_GATE_X + 1.5), WALL_H, t]}/>{wallMat}
       </mesh>
-      {/* Gate pillars */}
-      <mesh position={[-GATE_HW, y, frontZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
-      <mesh position={[ GATE_HW, y, frontZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
+
+      {/* Gate pillars (fixed size) */}
+      <mesh position={[ENTRY_GATE_X - 1.5, y, frontZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
+      <mesh position={[ENTRY_GATE_X + 1.5, y, frontZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
+      <mesh position={[EXIT_GATE_X - 1.5, y, backZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
+      <mesh position={[EXIT_GATE_X + 1.5, y, backZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
     </group>
+
+
+
   )
 }
 
@@ -322,7 +341,7 @@ const LotWalls = () => {
 const LotFloor = () => {
   const W = LOT_HALF_W
   return (
-    <group position={[0, -0.27, 0]}>
+    <group position={[0, -0.27, LOT_CENTER_Z]}>
       {/* Main floor */}
       <mesh rotation={[-Math.PI/2,0,0]} receiveShadow>
         <planeGeometry args={[W*2, LOT_DEPTH]}/>
@@ -338,7 +357,16 @@ const LotFloor = () => {
       {/* White slot-divider lines */}
       {ROW_Z.map((z, ri) =>
         Array.from({ length: COLS + 1 }, (_, ci) => {
-          const x = ci * SLOT_GAP_X - OFFSET_X - SLOT_GAP_X/2
+          // If it's the middle divider (between col 4 and 5), skip it to leave the path clear
+          if (ci === 5) return null
+          
+          let x
+          if (ci < 5) {
+            x = ci * SLOT_GAP_X - OFFSET_X - SLOT_GAP_X/2
+          } else {
+            x = ci * SLOT_GAP_X - OFFSET_X - SLOT_GAP_X/2 + 2.0 // matches CENTRE_GAP_X
+          }
+
           return (
             <mesh key={`${ri}-${ci}`} rotation={[-Math.PI/2,0,0]} position={[x, 0.02, z]}>
               <planeGeometry args={[0.05, 1.9]}/>
@@ -353,24 +381,32 @@ const LotFloor = () => {
   )
 }
 
-// ── Entry/Exit gate sign ──────────────────────────────────────────────────
-const GateSign = () => (
-  <group position={[GATE_X, 0, GATE_Z]}>
+// ── Entry/Exit gate signs ──────────────────────────────────────────────────
+const GateSign = ({ x, z, label, color = '#1e40af', icon = '🅿️' }) => (
+  <group position={[x, 0, z]}>
     {/* Gate arch beam */}
     <mesh position={[0, WALL_H + 0.15, 0]}>
       <boxGeometry args={[GATE_HW * 2 + 0.3, 0.25, 0.25]}/>
-      <meshStandardMaterial color="#1e40af" emissive="#3b82f6" emissiveIntensity={0.5}/>
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5}/>
     </mesh>
     <Html position={[0, WALL_H + 0.7, 0]} center>
       <div style={{
         color:'#fff', background:'rgba(30,64,175,0.92)',
         padding:'4px 12px', borderRadius:'6px', fontSize:'12px',
-        border:'1px solid #3b82f6', fontWeight:700, whiteSpace:'nowrap',
-        boxShadow:'0 0 12px rgba(59,130,246,0.5)'
-      }}>🅿️ ENTRY / EXIT</div>
+        border:`1px solid ${color}`, fontWeight:700, whiteSpace:'nowrap',
+        boxShadow:`0 0 12px rgba(59,130,246,0.5)`
+      }}>{icon} {label}</div>
     </Html>
   </group>
 )
+
+const Gates = () => (
+  <group>
+    <GateSign x={ENTRY_GATE_X} z={ENTRY_GATE_Z} label="ENTRY" icon="📥" color="#3b82f6" />
+    <GateSign x={EXIT_GATE_X} z={EXIT_GATE_Z} label="EXIT" icon="📤" color="#f59e0b" />
+  </group>
+)
+
 
 // ── Main ParkingGrid ──────────────────────────────────────────────────────
 export default function ParkingGrid({ totalSlots = 60, parkedCars = [], activePath = null }) {
@@ -382,7 +418,8 @@ export default function ParkingGrid({ totalSlots = 60, parkedCars = [], activePa
         textAlign:'center', color:'#3b82f6',
         position:'absolute', top:16, width:'100%', zIndex:10,
         margin:0, textShadow:'0 2px 4px rgba(0,0,0,0.6)'
-      }}>🅿️ 3D Smart Parking Simulation</h2>
+      }}>🅿️ 3D Smart Parking Simulation {parkedCars.length >= totalSlots && <span style={{color: '#ef4444', marginLeft: '10px'}}>(FULL)</span>}</h2>
+
 
       {activePath && (() => {
         const { steps } = computePath({ slotId: activePath.slotId })
@@ -410,14 +447,15 @@ export default function ParkingGrid({ totalSlots = 60, parkedCars = [], activePa
         <LotFloor />
         <DrivingLanes />
         <LotWalls />
-        <GateSign />
+        <Gates />
 
         {slots.map(slotId => {
+
           const carInSlot = parkedCars.find(c => c.slot?.id === slotId)
           const index = slotId - 1
           const col   = index % COLS
           const row   = Math.floor(index / COLS)
-          const x     = col * SLOT_GAP_X - OFFSET_X
+          const x     = getSlotX(col)
           const z     = ROW_Z[row]
           return (
             <GridSlot

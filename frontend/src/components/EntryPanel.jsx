@@ -4,7 +4,8 @@ function generateRfid() {
   return `RFID-${Math.random().toString(36).substr(2, 6).toUpperCase()}`
 }
 
-export default function EntryPanel({ onPark, parkedCars, totalSlots = 60, onSlotAssigned }) {
+export default function EntryPanel({ onPark, parkedCars, totalSlots = 60, isFull, onSlotAssigned }) {
+
   const [frequency, setFrequency] = useState('315.00')
   const [rfidCard, setRfidCard] = useState('')
   const [result, setResult] = useState(null)
@@ -40,7 +41,8 @@ export default function EntryPanel({ onPark, parkedCars, totalSlots = 60, onSlot
             break;
         }
     }
-    if (!bestFit) bestFit = { id: Math.floor(Math.random() * totalSlots) + 1, type: 'standard' }; // fallback
+    if (!bestFit) return; // No slots available
+
     
     setSlotAssigned(bestFit)
     setResult(prev => ({ ...prev, slot: bestFit }))
@@ -72,8 +74,17 @@ export default function EntryPanel({ onPark, parkedCars, totalSlots = 60, onSlot
   return (
     <div className="panel">
       <h2>📡 Entry Gate</h2>
-      <input value={frequency} onChange={e => setFrequency(e.target.value)} placeholder="Keyfob Hz" />
-      <button onClick={detectVehicle}>🔍 Scan + Issue RFID</button>
+      {isFull ? (
+        <div style={{ color: '#ef4444', fontWeight: 'bold', marginBottom: '10px' }}>
+          ⚠️ NO VACANCY
+        </div>
+      ) : (
+        <>
+          <input value={frequency} onChange={e => setFrequency(e.target.value)} placeholder="Keyfob Hz" />
+          <button onClick={detectVehicle}>🔍 Scan + Issue RFID</button>
+        </>
+      )}
+
       
       {result && !slotAssigned && (
         <div>
