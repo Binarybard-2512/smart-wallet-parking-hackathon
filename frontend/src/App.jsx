@@ -5,7 +5,7 @@ import ParkingGrid from './components/ParkingGrid.jsx'
 
 export default function App() {
   const [occupiedSlots, setOccupiedSlots] = useState(0)
-  const [totalSlots] = useState(60)
+  const [totalSlots] = useState(120)
   const [parkedCars, setParkedCars] = useState([])
   const [activePath, setActivePath] = useState(null)
   

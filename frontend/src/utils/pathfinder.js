@@ -1,123 +1,123 @@
 // ── Layout constants ──────────────────────────────────────────────────────
 export const COLS      = 10
 export const SLOT_GAP_X = 1.5
-export const CENTRE_GAP_X = 2.0 // Extra gap in the middle for the car path
+export const CENTRE_GAP_X = 2.0 
 export const OFFSET_X   = ((COLS - 1) * SLOT_GAP_X + CENTRE_GAP_X) / 2
 
-//  3 pairs of rows.  Each pair shares a central driving aisle.
-//  Between pairs: wider separation (inter-pair) lane.
-//
-//  z = +9.0  ← Gate (entry / exit)
-//  z = +7.5  ← Main entry aisle (car travels along x=0 here first)
-//  z = +6.5  ← Row 0  (pair-1 front)
-//  z = +5.0  ← pair-1 AISLE  ← car drives laterally here
-//  z = +3.5  ← Row 1  (pair-1 back)
-//  z = +2.25 ← inter-pair lane ← car crosses here
-//  z = +1.0  ← Row 2  (pair-2 front)
-//  z = −0.5  ← pair-2 AISLE  ← car drives laterally here
-//  z = −2.0  ← Row 3  (pair-2 back)
-//  z = −3.25 ← inter-pair lane ← car crosses here
-//  z = −4.5  ← Row 4  (pair-3 front)
-//  z = −6.0  ← pair-3 AISLE  ← car drives laterally here
-//  z = −7.5  ← Row 5  (pair-3 back)
-//  z = −9.0  ← back wall
+export const LEVEL_HEIGHT = 8.0
+export const SLOTS_PER_LEVEL = 60 // 6 rows * 10 cols
 
-export const ROW_Z        = [6.5,  3.5,  1.0, -2.0, -4.5, -7.5]
-export const PAIR_AISLE_Z = [5.0, -0.5, -6.0]
-export const INTER_LANE_Z = [2.25, -3.25]
+// perfectamente apilados (sin desfases laterales ni de profundidad)
+export const LEVEL_OFFSET_X = 0.0
+export const LEVEL_OFFSET_Z = 0.0
 
-// Symmetric entry/exit gate – centred at x = 0, in front of the lot
+// Full 6-row configuration
+export const ROW_Z        = [6.5, 3.5, 1.0, -2.0, -4.5, -7.5] 
+export const PAIR_AISLE_Z = [5.0, -0.5, -6.0]           
+export const INTER_LANE_Z = [2.25, -3.25]           
+
+// Symmetric entry/exit gate
 export const ENTRY_GATE_X = 6.5
 export const ENTRY_GATE_Z = 9.0
 export const EXIT_GATE_X  = -6.5
 export const EXIT_GATE_Z  = -10.0
 
-
-// (Keep these for backward compatibility if needed, but we'll use the specific ones)
 export const GATE_X = 0
 export const GATE_Z = 9.0
 
+export const MAIN_AISLE_X = 0          
+export const ENTRY_AISLE_Z = 7.5       
 
-// Main entry spine — car first travels straight down this before turning
-export const MAIN_AISLE_X = 0          // centre column (x = 0)
-export const ENTRY_AISLE_Z = 7.5       // just behind the gate, before row-0
-
-// Lot bounding box (used for walls / floor)
+// Lot bounding box
 export const LOT_HALF_W  = OFFSET_X + 1.5
-export const LOT_FRONT_Z = GATE_Z                   // 9
+export const LOT_FRONT_Z = 9.0
 export const LOT_BACK_Z  = -10.0
 
-/**
- * Returns the X-coordinate for a given column index, accounting for the central gap.
- */
 export function getSlotX(col) {
   const baseLine = col * SLOT_GAP_X - OFFSET_X
   return col >= 5 ? baseLine + CENTRE_GAP_X : baseLine
 }
 
 /**
- * Returns { waypoints, steps } for a STRICT L-shaped path Gate → Slot or Slot → Gate.
- * @param {string} type - 'entry' or 'exit'
+ * Returns { waypoints, steps } for a path Gate → Slot or Slot → Gate.
+ * Handles staggered levels: Top (1, slots 1-60), Bottom (0, slots 61-120, offset by X/Z).
  */
 export function computePath({ slotId, type = 'entry' }) {
   const isEntry = type === 'entry'
 
-  const index   = slotId - 1
-  const col     = index % COLS
-  const row     = Math.floor(index / COLS)
-  const pairIdx = Math.floor(row / 2)          // 0,1,2
-  const isFront = row % 2 === 0
+  const level   = slotId <= SLOTS_PER_LEVEL ? 1 : 0
+  const localId = (slotId - 1) % SLOTS_PER_LEVEL
+  
+  const col     = localId % COLS
+  const row     = Math.floor(localId / COLS)
+  const pairIdx = Math.floor(row / 2) 
+  
+  const topY    = LEVEL_HEIGHT + 0.35 // Gate height
+  const groundY = 0.35                // Ground floor height
+  
+  // Offsets: Level 1 (Top) is at 0,0, while Level 0 (Bottom) is staggered by LEVEL_OFFSET_X, LEVEL_OFFSET_Z
+  const offX    = level === 0 ? LEVEL_OFFSET_X : 0
+  const offZ    = level === 0 ? LEVEL_OFFSET_Z : 0
+  const targetY = level === 1 ? topY : groundY
 
-  const slotX  = getSlotX(col)
-  const slotZ  = ROW_Z[row]
-  const pathY  = 0.35
-  const targetAisleZ = PAIR_AISLE_Z[pairIdx]
+  const slotX   = getSlotX(col) + offX
+  const slotZ   = ROW_Z[row] + offZ
+  const mainAisleX = MAIN_AISLE_X + offX
+  const entryAisleZ = ENTRY_AISLE_Z + offZ
+  const targetAisleZ = PAIR_AISLE_Z[pairIdx] + offZ
 
-  // ── Step 1: Waypoints from gate to target aisle (or vice-versa) ──────
   const wps = []
   
   if (isEntry) {
-    wps.push([ENTRY_GATE_X, pathY, ENTRY_GATE_Z])        // entry gate
-    wps.push([ENTRY_GATE_X, pathY, ENTRY_AISLE_Z])       // alignment depth
-    wps.push([MAIN_AISLE_X, pathY, ENTRY_AISLE_Z])       // merge to center spine
+    // Start at Top Gate (fixed location)
+    wps.push([ENTRY_GATE_X, topY, ENTRY_GATE_Z])
     
-    // travel down the centre spine to reach the correct aisle
+    // If ground level, descend + move to staggered floor
+    if (level === 0) {
+      wps.push([ENTRY_GATE_X + offX, groundY, ENTRY_GATE_Z + offZ])
+    }
+    
+    wps.push([ENTRY_GATE_X + offX, targetY, entryAisleZ])
+    wps.push([mainAisleX, targetY, entryAisleZ])
+    
+    // Down the spine
     for (let p = 0; p < pairIdx; p++) {
-      wps.push([MAIN_AISLE_X, pathY, INTER_LANE_Z[p]])
+        wps.push([mainAisleX, targetY, INTER_LANE_Z[p] + offZ])
     }
-    wps.push([MAIN_AISLE_X, pathY, targetAisleZ])
-    wps.push([slotX, pathY, targetAisleZ])
-    wps.push([slotX, pathY, slotZ])
+    wps.push([mainAisleX, targetY, targetAisleZ])
+    wps.push([slotX, targetY, targetAisleZ])
+    wps.push([slotX, targetY, slotZ])
   } else {
-    // Exit path starts at slot (Slot -> Aisle -> Center Spine -> Exit Gate)
-    wps.push([slotX, pathY, slotZ])                     // start at slot
-    wps.push([slotX, pathY, targetAisleZ])              // pull into aisle
-    wps.push([MAIN_AISLE_X, pathY, targetAisleZ])       // move to center spine
+    // Exit path starts at slot
+    wps.push([slotX, targetY, slotZ])
+    wps.push([slotX, targetY, targetAisleZ])
+    wps.push([mainAisleX, targetY, targetAisleZ])
     
-    // travel from current aisle back to center spine... 
-    // Actually, we need to travel TOWARDS the back wall for exit, 
-    // but the center spine logic was designed gate-down.
-    // Let's travel from targetAisleZ to the back-exit.
-    
-    // If pairIdx is 0 (front), we need to pass inter-lanes 0 and 1 to get to the back.
-    // If pairIdx is 1, we pass inter-lane 1.
-    // If pairIdx is 2, we are already near the back.
+    // Travel from aisle back towards exit gate
     for (let p = pairIdx; p < INTER_LANE_Z.length; p++) {
-        wps.push([MAIN_AISLE_X, pathY, INTER_LANE_Z[p]])
+        wps.push([mainAisleX, targetY, INTER_LANE_Z[p] + offZ])
     }
     
-    // To reach back-left corner, we need to go to the back wall
-    // Symmetric gap (2.5 units) to match entry gap.
-    const BACK_AISLE_Z = -8.75
-    wps.push([MAIN_AISLE_X, pathY, BACK_AISLE_Z])
-    wps.push([EXIT_GATE_X, pathY, BACK_AISLE_Z])
-    wps.push([EXIT_GATE_X, pathY, EXIT_GATE_Z])
+    // Travel towards back wall
+    const BACK_AISLE_Z = -8.75 + offZ
+    wps.push([mainAisleX, targetY, BACK_AISLE_Z])
+    wps.push([EXIT_GATE_X + offX, targetY, BACK_AISLE_Z])
+    
+    // If ground level, lift + move back to Top Gate (fixed location)
+    if (level === 0) {
+        wps.push([EXIT_GATE_X, topY, BACK_AISLE_Z - offZ]) // Bridge the Z-offset back to gate
+    }
+    
+    wps.push([EXIT_GATE_X, topY, EXIT_GATE_Z])
   }
 
-  // ── Step count (for display) ─────────────────────────────────────────────
-  const lateralSteps = Math.round(Math.abs(slotX) / SLOT_GAP_X)
-  const depthSteps   = pairIdx * 2 + (isFront ? 1 : 2)
+  const lateralSteps = Math.round(Math.abs(slotX - offX) / SLOT_GAP_X)
+  const depthSteps   = row * 2 + (level === 0 ? 8 : 0) // Extra steps for staggered movement
 
   return { waypoints: wps, steps: lateralSteps + depthSteps }
 }
+
+
+
+
 

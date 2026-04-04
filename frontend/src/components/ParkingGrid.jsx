@@ -11,6 +11,8 @@ import {
   GATE_X, GATE_Z, ENTRY_AISLE_Z,
   LOT_HALF_W, LOT_FRONT_Z, LOT_BACK_Z,
   MAIN_AISLE_X,
+  LEVEL_HEIGHT, SLOTS_PER_LEVEL,
+  LEVEL_OFFSET_X, LEVEL_OFFSET_Z
 } from '../utils/pathfinder'
 
 
@@ -172,10 +174,12 @@ const PathVisualizer = ({ slotId, type }) => {
 }
 
 // ── Driving lane strips + markings ────────────────────────────────────────
-const DrivingLanes = () => {
-  const Y = -0.24   // just above the floor
+const DrivingLanes = ({ level = 0 }) => {
+  const offX = level === 0 ? LEVEL_OFFSET_X : 0
+  const offZ = level === 0 ? LEVEL_OFFSET_Z : 0
+  const levelY = level * LEVEL_HEIGHT
+  const Y = levelY - 0.24   
 
-  // Dashed centre-line arrow helper rendered as small chevron meshes
   const CentreDashes = ({ zStart, zEnd, x = MAIN_AISLE_X, count = 5 }) => {
     const step = (zEnd - zStart) / (count + 1)
     return (
@@ -193,7 +197,6 @@ const DrivingLanes = () => {
     )
   }
 
-  // Arrow chevrons pointing in the −z direction (into the lot)
   const ArrowChevrons = ({ z, count = 4, laneWidth }) => {
     const spacing = laneWidth / (count + 1)
     const xStart  = -(laneWidth / 2)
@@ -213,7 +216,7 @@ const DrivingLanes = () => {
   }
 
   return (
-    <group>
+    <group position={[offX, 0, offZ]}>
       {/* ── Main entry aisle (gate → row 0) ─────────────────────── */}
       <mesh rotation={[-Math.PI/2, 0, 0]} position={[MAIN_AISLE_X, Y, (GATE_Z + ROW_Z[0]) / 2]}>
         <planeGeometry args={[LANE_W, GATE_Z - ROW_Z[0]]} />
@@ -230,9 +233,9 @@ const DrivingLanes = () => {
 
       {/* ── Pair aisles (between paired rows) ───────────────────── */}
       {PAIR_AISLE_Z.map((az, i) => {
-        const frontRowZ = ROW_Z[i * 2]      // row above the aisle
-        const backRowZ  = ROW_Z[i * 2 + 1]  // row below the aisle
-        const aisleH    = frontRowZ - backRowZ  // depth of the aisle gap
+        const frontRowZ = ROW_Z[i * 2]
+        const backRowZ  = ROW_Z[i * 2 + 1]
+        const aisleH    = frontRowZ - backRowZ  
         return (
           <group key={i}>
             {/* Lane surface */}
@@ -247,20 +250,20 @@ const DrivingLanes = () => {
                 <meshStandardMaterial color="#facc15" opacity={0.65} transparent />
               </mesh>
             ))}
-            {/* Centre dashes along z-axis (short — this lane is lateral) */}
+            {/* Centre dashes along z-axis */}
             <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, Y + 0.011, az]}>
               <planeGeometry args={[LANE_W - 0.5, 0.07]} />
               <meshStandardMaterial color="#facc15" opacity={0.25} transparent />
             </mesh>
             {/* Row-label above lane */}
-            <Html position={[-LOT_HALF_W + 0.7, 0.45, az]} center>
+            <Html position={[-LOT_HALF_W + 0.7, levelY + 0.45, az]} center>
               <div style={{
                 color:'#facc15', fontSize:'9px', fontWeight:700,
                 background:'rgba(0,0,0,0.5)', padding:'1px 5px', borderRadius:3,
                 border:'1px solid rgba(250,204,21,0.3)', whiteSpace:'nowrap',
                 pointerEvents:'none'
               }}>
-                🚗 AISLE {i + 1}
+                🚗 AISLE {i + 1} ({level === 1 ? 'TOP' : 'BOTTOM'})
               </div>
             </Html>
           </group>
@@ -269,25 +272,21 @@ const DrivingLanes = () => {
 
       {/* ── Inter-pair lanes (between pairs of rows) ─────────────── */}
       {INTER_LANE_Z.map((lz, i) => {
-        // the lane sits between pair i's back row and pair (i+1)'s front row
-        const topZ    = ROW_Z[i * 2 + 1]    // bottom of the row above
-        const bottomZ = ROW_Z[(i + 1) * 2]  // top of the row below
+        const topZ    = ROW_Z[i * 2 + 1]
+        const bottomZ = ROW_Z[(i + 1) * 2]
         const laneH   = topZ - bottomZ
         return (
           <group key={i}>
-            {/* Lane surface — slightly lighter to distinguish */}
             <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, Y, lz]}>
               <planeGeometry args={[LANE_W, laneH - 0.1]} />
               <meshStandardMaterial color="#162032" opacity={0.60} transparent />
             </mesh>
-            {/* White edge stripes */}
             {[-LOT_HALF_W + 0.32, LOT_HALF_W - 0.32].map((ex, j) => (
               <mesh key={j} rotation={[-Math.PI/2, 0, 0]} position={[ex, Y + 0.011, lz]}>
                 <planeGeometry args={[0.07, laneH - 0.1]} />
                 <meshStandardMaterial color="#ffffff" opacity={0.35} transparent />
               </mesh>
             ))}
-            {/* Directional chevron arrows */}
             <ArrowChevrons z={lz} count={5} laneWidth={LANE_W} />
           </group>
         )
@@ -297,55 +296,69 @@ const DrivingLanes = () => {
 }
 
 // ── Parking lot walls ─────────────────────────────────────────────────────
-const LotWalls = () => {
-  const wallMat = <meshStandardMaterial color="#334155" metalness={0.2} roughness={0.8}/>
+const LotWalls = ({ level = 0 }) => {
+  const offX = level === 0 ? LEVEL_OFFSET_X : 0
+  const offZ = level === 0 ? LEVEL_OFFSET_Z : 0
+  const wallMat = <meshStandardMaterial color="#334155" metalness={0.2} roughness={0.8} transparent opacity={level > 0 ? 0.4 : 1}/>
   const W = LOT_HALF_W, frontZ = LOT_FRONT_Z, backZ = LOT_BACK_Z
-  const y = WALL_H / 2, t = 0.3
+  const levelY = level * LEVEL_HEIGHT
+  const y = levelY + (WALL_H / 2), t = 0.3
+  const hasGaps = level === 1
 
   return (
-    <group>
-      {/* Back wall with Exit Gate gap at Back-Left side */}
-      <mesh position={[(-W + (EXIT_GATE_X - 1.5)) / 2, y, backZ]}>
-        <boxGeometry args={[Math.abs((EXIT_GATE_X - 1.5) - (-W)), WALL_H, t]}/>{wallMat}
-      </mesh>
-      <mesh position={[(EXIT_GATE_X + 1.5 + W) / 2, y, backZ]}>
-        <boxGeometry args={[W - (EXIT_GATE_X + 1.5), WALL_H, t]}/>{wallMat}
-      </mesh>
+    <group position={[offX, 0, offZ]}>
+      {/* Back wall */}
+      {hasGaps ? (
+        <>
+          <mesh position={[(-W + (EXIT_GATE_X - 1.5)) / 2, y, backZ]}>
+            <boxGeometry args={[Math.abs((EXIT_GATE_X - 1.5) - (-W)), WALL_H, t]}/>{wallMat}
+          </mesh>
+          <mesh position={[(EXIT_GATE_X + 1.5 + W) / 2, y, backZ]}>
+            <boxGeometry args={[W - (EXIT_GATE_X + 1.5), WALL_H, t]}/>{wallMat}
+          </mesh>
+          <mesh position={[EXIT_GATE_X - 1.5, y, backZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
+          <mesh position={[EXIT_GATE_X + 1.5, y, backZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
+        </>
+      ) : (
+        <mesh position={[0, y, backZ]}><boxGeometry args={[W * 2, WALL_H, t]}/>{wallMat}</mesh>
+      )}
       
       {/* Left wall */}
       <mesh position={[-W, y, LOT_CENTER_Z]}><boxGeometry args={[t, WALL_H, LOT_DEPTH]}/>{wallMat}</mesh>
       {/* Right wall */}
       <mesh position={[W, y, LOT_CENTER_Z]}><boxGeometry args={[t, WALL_H, LOT_DEPTH]}/>{wallMat}</mesh>
       
-      {/* Front wall with Entry Gate gap at Front-Right side */}
-      <mesh position={[(-W + (ENTRY_GATE_X - 1.5)) / 2, y, frontZ]}>
-        <boxGeometry args={[W + (ENTRY_GATE_X - 1.5), WALL_H, t]}/>{wallMat}
-      </mesh>
-      <mesh position={[(ENTRY_GATE_X + 1.5 + W) / 2, y, frontZ]}>
-        <boxGeometry args={[W - (ENTRY_GATE_X + 1.5), WALL_H, t]}/>{wallMat}
-      </mesh>
-
-      {/* Gate pillars (fixed size) */}
-      <mesh position={[ENTRY_GATE_X - 1.5, y, frontZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
-      <mesh position={[ENTRY_GATE_X + 1.5, y, frontZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
-      <mesh position={[EXIT_GATE_X - 1.5, y, backZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
-      <mesh position={[EXIT_GATE_X + 1.5, y, backZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
+      {/* Front wall */}
+      {hasGaps ? (
+        <>
+          <mesh position={[(-W + (ENTRY_GATE_X - 1.5)) / 2, y, frontZ]}>
+            <boxGeometry args={[W + (ENTRY_GATE_X - 1.5), WALL_H, t]}/>{wallMat}
+          </mesh>
+          <mesh position={[(ENTRY_GATE_X + 1.5 + W) / 2, y, frontZ]}>
+            <boxGeometry args={[W - (ENTRY_GATE_X + 1.5), WALL_H, t]}/>{wallMat}
+          </mesh>
+          <mesh position={[ENTRY_GATE_X - 1.5, y, frontZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
+          <mesh position={[ENTRY_GATE_X + 1.5, y, frontZ]}><boxGeometry args={[t, WALL_H, t]}/>{wallMat}</mesh>
+        </>
+      ) : (
+        <mesh position={[0, y, frontZ]}><boxGeometry args={[W * 2, WALL_H, t]}/>{wallMat}</mesh>
+      )}
     </group>
-
-
-
   )
 }
 
 // ── Lot floor with row + aisle markings ───────────────────────────────────
-const LotFloor = () => {
+const LotFloor = ({ level = 0 }) => {
+  const offX = level === 0 ? LEVEL_OFFSET_X : 0
+  const offZ = level === 0 ? LEVEL_OFFSET_Z : 0
   const W = LOT_HALF_W
+  const levelY = level * LEVEL_HEIGHT
   return (
-    <group position={[0, -0.27, LOT_CENTER_Z]}>
+    <group position={[offX, levelY - 0.27, LOT_CENTER_Z + offZ]}>
       {/* Main floor */}
       <mesh rotation={[-Math.PI/2,0,0]} receiveShadow>
         <planeGeometry args={[W*2, LOT_DEPTH]}/>
-        <meshStandardMaterial color="#0f172a"/>
+        <meshStandardMaterial color="#0f172a" transparent={level > 0} opacity={level > 0 ? 0.4 : 1}/>
       </mesh>
       {/* Row strips — light band under each slot row */}
       {ROW_Z.map((z, i) => (
@@ -357,14 +370,12 @@ const LotFloor = () => {
       {/* White slot-divider lines */}
       {ROW_Z.map((z, ri) =>
         Array.from({ length: COLS + 1 }, (_, ci) => {
-          // If it's the middle divider (between col 4 and 5), skip it to leave the path clear
           if (ci === 5) return null
-          
           let x
           if (ci < 5) {
             x = ci * SLOT_GAP_X - OFFSET_X - SLOT_GAP_X/2
           } else {
-            x = ci * SLOT_GAP_X - OFFSET_X - SLOT_GAP_X/2 + 2.0 // matches CENTRE_GAP_X
+            x = ci * SLOT_GAP_X - OFFSET_X - SLOT_GAP_X/2 + 2.0 
           }
 
           return (
@@ -382,28 +393,31 @@ const LotFloor = () => {
 }
 
 // ── Entry/Exit gate signs ──────────────────────────────────────────────────
-const GateSign = ({ x, z, label, color = '#1e40af', icon = '🅿️' }) => (
-  <group position={[x, 0, z]}>
-    {/* Gate arch beam */}
-    <mesh position={[0, WALL_H + 0.15, 0]}>
-      <boxGeometry args={[GATE_HW * 2 + 0.3, 0.25, 0.25]}/>
-      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5}/>
-    </mesh>
-    <Html position={[0, WALL_H + 0.7, 0]} center>
-      <div style={{
-        color:'#fff', background:'rgba(30,64,175,0.92)',
-        padding:'4px 12px', borderRadius:'6px', fontSize:'12px',
-        border:`1px solid ${color}`, fontWeight:700, whiteSpace:'nowrap',
-        boxShadow:`0 0 12px rgba(59,130,246,0.5)`
-      }}>{icon} {label}</div>
-    </Html>
-  </group>
-)
+const GateSign = ({ x, z, label, color = '#1e40af', icon = '🅿️', level = 1 }) => {
+  const levelY = level * LEVEL_HEIGHT
+  return (
+    <group position={[x, levelY, z]}>
+      {/* Gate arch beam */}
+      <mesh position={[0, WALL_H + 0.15, 0]}>
+        <boxGeometry args={[GATE_HW * 2 + 0.3, 0.25, 0.25]}/>
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5}/>
+      </mesh>
+      <Html position={[0, WALL_H + 0.7, 0]} center>
+        <div style={{
+          color:'#fff', background:'rgba(30,64,175,0.92)',
+          padding:'4px 12px', borderRadius:'6px', fontSize:'12px',
+          border:`1px solid ${color}`, fontWeight:700, whiteSpace:'nowrap',
+          boxShadow:`0 0 12px rgba(59,130,246,0.5)`
+        }}>{icon} {label}</div>
+      </Html>
+    </group>
+  )
+}
 
 const Gates = () => (
   <group>
-    <GateSign x={ENTRY_GATE_X} z={ENTRY_GATE_Z} label="ENTRY" icon="📥" color="#3b82f6" />
-    <GateSign x={EXIT_GATE_X} z={EXIT_GATE_Z} label="EXIT" icon="📤" color="#f59e0b" />
+    <GateSign x={ENTRY_GATE_X} z={ENTRY_GATE_Z} label="ENTRY" icon="📥" color="#3b82f6" level={1} />
+    <GateSign x={EXIT_GATE_X} z={EXIT_GATE_Z} label="EXIT" icon="📤" color="#f59e0b" level={1} />
   </group>
 )
 
@@ -444,24 +458,33 @@ export default function ParkingGrid({ totalSlots = 60, parkedCars = [], activePa
           shadow-mapSize-width={2048} shadow-mapSize-height={2048}/>
         <pointLight position={[0, 8, -5]} intensity={0.6} color="#93c5fd"/>
 
-        <LotFloor />
-        <DrivingLanes />
-        <LotWalls />
+        <LotFloor level={0} />
+        <DrivingLanes level={0} />
+        <LotWalls level={0} />
+        
+        <LotFloor level={1} />
+        <DrivingLanes level={1} />
+        <LotWalls level={1} />
+
         <Gates />
 
         {slots.map(slotId => {
-
           const carInSlot = parkedCars.find(c => c.slot?.id === slotId)
-          const index = slotId - 1
-          const col   = index % COLS
-          const row   = Math.floor(index / COLS)
-          const x     = getSlotX(col)
-          const z     = ROW_Z[row]
+          const level = slotId <= SLOTS_PER_LEVEL ? 1 : 0
+          const localId = (slotId - 1) % SLOTS_PER_LEVEL
+          const col   = localId % COLS
+          const row   = Math.floor(localId / COLS)
+          const offX  = level === 0 ? LEVEL_OFFSET_X : 0
+          const offZ  = level === 0 ? LEVEL_OFFSET_Z : 0
+          const x     = getSlotX(col) + offX
+          const z     = ROW_Z[row] + offZ
+          const y     = level * LEVEL_HEIGHT
+          
           return (
             <GridSlot
               key={`${slotId}-${!!carInSlot}`}
               slotId={slotId} carInSlot={carInSlot}
-              position={[x, 0, z]}
+              position={[x, y, z]}
             />
           )
         })}
