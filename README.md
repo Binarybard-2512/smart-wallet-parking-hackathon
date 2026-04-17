@@ -1,7 +1,7 @@
-# 🚗 Smart Wallet Parking System
+# 🚗 Smart Valet Parking System
 ### *Next-Gen Multi-Level AI-Driven Parking Solution*
 
-[![Hackathon](https://img.shields.io/badge/Hackathon-2024-blueviolet?style=for-the-badge)](https://github.com/Binarybard-2512/smart-wallet-parking-hackathon)
+[![Hackathon](https://img.shields.io/badge/Hackathon-2024-blueviolet?style=for-the-badge)](https://github.com/Binarybard-2512/smart-valet-parking-hackathon)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
 [![Three.js](https://img.shields.io/badge/Three.js-000000?style=for-the-badge&logo=three.js&logoColor=white)](https://threejs.org/)
 

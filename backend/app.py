@@ -12,7 +12,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')  # �
 
 @app.route('/')
 def home():
-    return jsonify({'message': 'Smart Wallet Parking System API running'})
+    return jsonify({'message': 'Smart Valet Parking System API running'})
 
 @app.route('/api/slots')
 def get_slots():
@@ -41,5 +41,5 @@ def handle_slot_update(data):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    print("🚀 Smart Wallet Parking starting...")
+    print("🚀 Smart Valet Parking starting...")
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)

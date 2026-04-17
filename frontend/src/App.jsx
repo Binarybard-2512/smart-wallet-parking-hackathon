@@ -24,7 +24,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1>🚗 Smart Wallet Parking System</h1>
+      <h1>🚗 Smart Valet Parking System</h1>
       <p className="subtitle">RFID + Keyfob Frequency → AI Assignment</p>
       
       {isFull && (
